@@ -9,7 +9,10 @@ import logging
 import pandas as pd
 import numpy as np
 import streamlit as st
-from typing import Optional, Dict, List
+from mlflow import artifacts
+from mlflow import sklearn as skl
+from sklearn.pipeline import Pipeline
+from typing import Any, Optional, Dict, List
 
 
 # Setup logging.
@@ -23,7 +26,7 @@ st.set_page_config(page_title="Job Role Recommender",
                     page_icon="🎓", menu_items={"About": f"{about}"})
 st.title(body="Still confused about your dream Job Role? Let us help you out! 🎓💼")
 st.markdown(
-    "*Our **Job Role Recommender** will suggest you most apt Job Role & courses to get started with preps for achieving it. **Good Luck! 🧿**...*")
+    "*Our **:blue[Job Role Recommender]** will suggest you most apt Job Role & courses to get started with preps for achieving it. **:green[Good Luck!]*** 🧿 ...")
 
 # Initialize session state
 if 'mlf_sk_model_v1' not in st.session_state:
@@ -34,7 +37,12 @@ if 'mlf_artifacts' not in st.session_state:
     st.session_state.mlf_artifacts = None
 
 # Set mlflow tracking URI
-mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI"))
+mlflow_uri = os.environ.get("MLFLOW_TRACKING_URI")
+if mlflow_uri is None:
+    logger.critical("MLFLOW_TRACKING_URI environment variable is not set.")
+    st.error("MLFLOW_TRACKING_URI environment variable is not set.", icon="🚨")
+    raise ValueError("MLFLOW_TRACKING_URI environment variable is not set")
+mlflow.set_tracking_uri(mlflow_uri)
 
 
 # Model loading function
@@ -51,7 +59,7 @@ def load_model(model_alias: str, model_name: str="job_role_recommender") -> Opti
     try:
         logger.info(f"Loading model from {model_name}")
         model_uri = f"models:/{model_name}@{model_alias}"
-        sk_model = mlflow.sklearn.load_model(model_uri=model_uri)
+        sk_model = skl.load_model(model_uri=model_uri)
         logger.info("Model loaded successfully.")
         st.success(f"{model_name}:{model_alias} model loaded successfully!", icon="✅")
         return sk_model
@@ -69,7 +77,7 @@ if "mlf_sk_model_v2" not in st.session_state or st.session_state.mlf_sk_model_v2
 if "mlf_artifacts" not in st.session_state or st.session_state.mlf_artifacts is None:
     try:
         logger.info("Loading artifacts from MLflow.")
-        st.session_state.mlf_artifacts = mlflow.artifacts.download_artifacts(run_id="48f0b164815a408fba4fd7c61e2966cf")
+        st.session_state.mlf_artifacts = artifacts.download_artifacts(run_id="48f0b164815a408fba4fd7c61e2966cf")
         logger.info("Artifacts downloaded successfully.")
         st.success("Artifacts downloaded successfully!", icon="✅")
     except Exception as e:
@@ -77,28 +85,49 @@ if "mlf_artifacts" not in st.session_state or st.session_state.mlf_artifacts is 
         st.error(f"Error downloading artifacts: {e}", icon="🚨")
 
 # Loading artifacts
+if st.session_state.mlf_artifacts is None:
+    logger.error("MLflow artifacts path is None")
+    st.error("MLflow artifacts path is not set", icon="🚨")
+    st.stop()
+
 try:
     logger.info("Loading artifacts.")
-    with open(os.path.join(st.session_state.mlf_artifacts, "le_crts/le_crts.sav"), "rb") as f1:
-        le_crts = pickle.load(f1)
-    with open(os.path.join(st.session_state.mlf_artifacts, "le_intbks/le_intbks.sav"), "rb") as f2:
-        le_intbks = pickle.load(f2)
-    with open(os.path.join(st.session_state.mlf_artifacts, "le_intca/le_intca.sav"), "rb") as f3:
-        le_intca = pickle.load(f3)
-    with open(os.path.join(st.session_state.mlf_artifacts, "le_intsb/le_intsb.sav"), "rb") as f4:
-        le_intsb = pickle.load(f4)
-    with open(os.path.join(st.session_state.mlf_artifacts, "le_memsc/le_memsc.sav"), "rb") as f5:
-        le_memsc = pickle.load(f5)
-    with open(os.path.join(st.session_state.mlf_artifacts, "le_rwr/le_rwr.sav"), "rb") as f6:
-        le_rwr = pickle.load(f6)
-    with open(os.path.join(st.session_state.mlf_artifacts, "le_tycompt/le_tycompt.sav"), "rb") as f7:
-        le_tycompt = pickle.load(f7)
-    with open(os.path.join(st.session_state.mlf_artifacts, "le_wkshp/le_wkshp.sav"), "rb") as f8:
-        le_wkshp = pickle.load(f8)
-    with open(os.path.join(st.session_state.mlf_artifacts, "ohe/one_hot_encoder.sav"), "rb") as f9:
-        ohe = pickle.load(f9)
-    with open(os.path.join(st.session_state.mlf_artifacts, "ohe_cols/ohe_cols.sav"), "rb") as f10:
-        ohe_cols = pickle.load(f10)
+    artifacts_path = str(st.session_state.mlf_artifacts)  # Convert to string explicitly
+    
+    artifact_files = {
+        "le_crts": "le_crts/le_crts.sav",
+        "le_intbks": "le_intbks/le_intbks.sav",
+        "le_intca": "le_intca/le_intca.sav",
+        "le_intsb": "le_intsb/le_intsb.sav",
+        "le_memsc": "le_memsc/le_memsc.sav",
+        "le_rwr": "le_rwr/le_rwr.sav",
+        "le_tycompt": "le_tycompt/le_tycompt.sav",
+        "le_wkshp": "le_wkshp/le_wkshp.sav",
+        "ohe": "ohe/one_hot_encoder.sav",
+        "ohe_cols": "ohe_cols/ohe_cols.sav"
+    }
+
+    # Load all artifacts
+    loaded_artifacts = {}
+    for name, filepath in artifact_files.items():
+        full_path = os.path.join(artifacts_path, filepath)
+        if not os.path.exists(full_path):
+            raise FileNotFoundError(f"Artifact file not found: {full_path}")
+        with open(full_path, "rb") as f:
+            loaded_artifacts[name] = pickle.load(f)
+
+    # Assign to variables
+    le_crts = loaded_artifacts["le_crts"]
+    le_intbks = loaded_artifacts["le_intbks"]
+    le_intca = loaded_artifacts["le_intca"]
+    le_intsb = loaded_artifacts["le_intsb"]
+    le_memsc = loaded_artifacts["le_memsc"]
+    le_rwr = loaded_artifacts["le_rwr"]
+    le_tycompt = loaded_artifacts["le_tycompt"]
+    le_wkshp = loaded_artifacts["le_wkshp"]
+    ohe = loaded_artifacts["ohe"]
+    ohe_cols = loaded_artifacts["ohe_cols"]
+
     logger.info("Artifacts loaded successfully.")
     st.success("Artifacts loaded successfully!", icon="✅")
 except Exception as e:
@@ -119,31 +148,31 @@ hackathons: int = st.slider("Hackathons Participation (0-9)", min_value=0, max_v
 pub_speak: int = st.slider("Public Speaking Skills Rating (0-9)", min_value=0, max_value=9, value=5, step=1, help="Public Speaking Skills (0-9) - 0 being the lowest & 9 being the highest rating.")
 
 SELE_LEARN_MAP: Dict[str, str] = {"yes": "Yes, I can learn new skills on my own. :thumbsup:", "no": "No, I need help learning new skills. :thumbsdown:"}
-self_learn: str = st.pills("Can you learn new skills on your own?", options=SELE_LEARN_MAP, default="yes", format_func=lambda option: SELE_LEARN_MAP[option], help="Can you learn new skills on your own? - Yes or No")
+self_learn: str = str(st.pills("Can you learn new skills on your own?", options=SELE_LEARN_MAP, default="yes", format_func=lambda option: SELE_LEARN_MAP[option], help="Can you learn new skills on your own? - Yes or No"))
 
 XTRA_COURSE_MAP: Dict[str, str] = {"yes": "Yes, I did extra courses. 🎓📚", "no": "No, I did not take extra courses. 🎓"}
-xtra_courses: str = st.pills("Did you take any extra courses?", options=XTRA_COURSE_MAP, default="yes", format_func=lambda option: XTRA_COURSE_MAP[option], help="Did you take any extra courses? - Yes or No")
+xtra_courses: str = str(st.pills("Did you take any extra courses?", options=XTRA_COURSE_MAP, default="yes", format_func=lambda option: XTRA_COURSE_MAP[option], help="Did you take any extra courses? - Yes or No"))
 
 TAKEN_GUIDANCE_MAP: Dict[str, str] = {"yes": "Yes, I took guidance from Elders/Seniors/Others. :thumbsup:", "no": "No, I did not take guidance from anyone. :thumbsdown:"}
-taken_guidance: str = st.pills("Did you take guidance from Elders/Seniors/Others?", options=TAKEN_GUIDANCE_MAP, default="yes", format_func=lambda option: TAKEN_GUIDANCE_MAP[option], help="Did you take guidance from Elders/Seniors/Others? - Yes or No")
+taken_guidance: str = str(st.pills("Did you take guidance from Elders/Seniors/Others?", options=TAKEN_GUIDANCE_MAP, default="yes", format_func=lambda option: TAKEN_GUIDANCE_MAP[option], help="Did you take guidance from Elders/Seniors/Others? - Yes or No"))
 
 TEAM_WORK_MAP: Dict[str, str] = {"yes": "Yes, I am familiar to working in teams. 👥", "no": "No, I cannot work in a team. 👤"}
-team_work: str = st.pills("Are you familiar to working in teams?", options=TEAM_WORK_MAP, default="yes", format_func=lambda option: TEAM_WORK_MAP[option], help="Are you familiar to working in teams? - Yes or No")
+team_work: str = str(st.pills("Are you familiar to working in teams?", options=TEAM_WORK_MAP, default="yes", format_func=lambda option: TEAM_WORK_MAP[option], help="Are you familiar to working in teams? - Yes or No"))
 
 INTROVERT_MAP: Dict[str, str] = {"yes": "Yes, I am an introvert. 🫣", "no": "No, I am not an introvert. 😎"}
-introvert: str = st.pills("Are you an introvert?", options=INTROVERT_MAP, default="yes", format_func=lambda option: INTROVERT_MAP[option], help="Are you an introvert? - Yes or No")
+introvert: str = str(st.pills("Are you an introvert?", options=INTROVERT_MAP, default="yes", format_func=lambda option: INTROVERT_MAP[option], help="Are you an introvert? - Yes or No"))
 
 EMP_MAP: Dict[str, str] = {"excellent": "Excellent ✅", "medium": "Medium ☑️", "poor": "Poor ❌"}
-rdwrskl: str = st.pills("Rate your reading-writing skills", options=EMP_MAP, default="excellent", format_func=lambda option: EMP_MAP[option], help="Rate your reading-writing skills - Excellent, Medium or Poor", key="rdwrskl_pills")
+rdwrskl: str = str(st.pills("Rate your reading-writing skills", options=EMP_MAP, default="excellent", format_func=lambda option: EMP_MAP[option], help="Rate your reading-writing skills - Excellent, Medium or Poor", key="rdwrskl_pills"))
 
 # mem_cap_map: Dict[str, str] = {"excellent": "Excellent ✅", "medium": "Medium ☑️", "poor": "Poor ❌"}
-mem_cap: str = st.pills("Rate your memory capacity", options=EMP_MAP, default="excellent", format_func=lambda option: EMP_MAP[option], help="Rate your memory capacity - Excellent, Medium or Poor", key="memcap_pills")
+mem_cap: str = str(st.pills("Rate your memory capacity", options=EMP_MAP, default="excellent", format_func=lambda option: EMP_MAP[option], help="Rate your memory capacity - Excellent, Medium or Poor", key="memcap_pills"))
 
 MGMNT_TECH_MAP: Dict[str, str] = {"Management": "Management 💼", "Technical": "Technical 🚀"}
-mgmnt_tech: str = st.pills("What is your job role preference?", options=MGMNT_TECH_MAP, default="Management", format_func=lambda option: MGMNT_TECH_MAP[option], help="What is your preference? - Management or Technical")
+mgmnt_tech: str = str(st.pills("What is your job role preference?", options=MGMNT_TECH_MAP, default="Management", format_func=lambda option: MGMNT_TECH_MAP[option], help="What is your preference? - Management or Technical"))
 
 HARD_SMART_MAP: Dict[str, str] = {"hard worker": "Hard Worker 💪", "smart worker": "Smart Worker 🧠"}
-hard_smart: str = st.pills("Are you a hard worker or a smart worker?", options=HARD_SMART_MAP, default="hard worker", format_func=lambda option: HARD_SMART_MAP[option], help="Are you a hard worker or a smart worker? - Hard Worker or Smart Worker")
+hard_smart: str = str(st.pills("Are you a hard worker or a smart worker?", options=HARD_SMART_MAP, default="hard worker", format_func=lambda option: HARD_SMART_MAP[option], help="Are you a hard worker or a smart worker? - Hard Worker or Smart Worker"))
 
 CRTS_LIST: List[str] = ['information security', 'shell programming', 'r programming',
        'distro making', 'machine learning', 'full stack', 'hadoop',
@@ -178,10 +207,10 @@ TYPE_COMP_LIST: List[str] = ['BPA', 'Cloud Services', 'product development',
        'Web Services', 'Finance', 'Sales and Marketing', 'Product based',
        'Service Based']
 type_comp: str = st.selectbox("Select the type of company you want to settle in", options=TYPE_COMP_LIST, index=0, help="Select the type of company you want to settle in - Select from the list")
-
+st.markdown("<br><br>", unsafe_allow_html=True)
 # Select model version
 MODEL_VRSN_MAP: Dict[str, str] = {"challenger1": "Version 1️⃣", "challenger2": "Version 2️⃣"}
-model_version: str = st.pills("Select the model version to use for prediction", options=MODEL_VRSN_MAP, default="challenger2", format_func=lambda option: MODEL_VRSN_MAP[option], help="Select the model version to use for prediction - Version 1 or Version 2")
+model_version: str = str(st.pills("Select the model version to use for prediction", options=MODEL_VRSN_MAP, default="challenger2", format_func=lambda option: MODEL_VRSN_MAP[option], help="Select the model version to use for prediction - Version 1 or Version 2"))
 
 random_seed: int = st.number_input("Random Seed", min_value=0, max_value=100, value=42, step=1, help="Random Seed - Random seed for reproducibility")
 
@@ -254,14 +283,25 @@ df['Experience_Exposure'] = (
 )
 
 # Confirming the model version
+model_: Pipeline | Any = None
 match model_version:
     case "challenger1":
         model_ = st.session_state.mlf_sk_model_v1
     case "challenger2":
         model_ = st.session_state.mlf_sk_model_v2
+    case _:
+        logger.error(f"Invalid model version: {model_version}")
+        st.error(f"Invalid model version: {model_version}", icon="🚨")
+        st.stop()
+
+# Validate that model was loaded successfully
+if model_ is None:
+    logger.error("Model failed to load")
+    st.error("Model failed to load", icon="🚨")
+    st.stop()
 
 # Making prediction
-st.subheader("Your Job Role & Courses Recommendation:")
+st.subheader("Your Job Role & Courses Recommendation📋:")
 np.random.seed(random_seed)
 if pred_btn:
     with st.spinner("Making prediction..."):
