@@ -1,18 +1,21 @@
 # main.py
 
 import os
-import time
+import torch
 import mlflow
 import base64
 import pickle
 import logging
-import pandas as pd
 import numpy as np
+import pandas as pd
+import model_builder
 import streamlit as st
 from mlflow import artifacts
 from mlflow import sklearn as skl
+from mlflow import pytorch as pt
+# from icecream import ic
 from sklearn.pipeline import Pipeline
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional, Dict, List, Union
 
 
 # Setup logging.
@@ -33,6 +36,8 @@ if 'mlf_sk_model_v1' not in st.session_state:
     st.session_state.mlf_sk_model_v1 = None
 if 'mlf_sk_model_v2' not in st.session_state:
     st.session_state.mlf_sk_model_v2 = None
+if "mlf_pt_model_v1" not in st.session_state:
+    st.session_state.mlf_pt_model_v1 = None
 if 'mlf_artifacts' not in st.session_state:
     st.session_state.mlf_artifacts = None
 
@@ -57,12 +62,17 @@ def load_model(model_alias: str, model_name: str="job_role_recommender") -> Opti
         Optional[object]: The loaded model or None if loading fails.
     """
     try:
-        logger.info(f"Loading model from {model_name}")
-        model_uri = f"models:/{model_name}@{model_alias}"
-        sk_model = skl.load_model(model_uri=model_uri)
-        logger.info("Model loaded successfully.")
-        st.success(f"{model_name}:{model_alias} model loaded successfully!", icon="✅")
-        return sk_model
+        with st.spinner(f"This may take few moments. Loading *:blue[{model_name}:{model_alias}]* model..."):
+            logger.info(f"Loading model from {model_name}")
+            model_uri = f"models:/{model_name}@{model_alias}"
+            mlf_model = None
+            if model_alias == "champion":
+                mlf_model = pt.load_model(model_uri, map_location=torch.device('cpu'))
+            elif "challenger" in model_alias:
+                mlf_model = skl.load_model(model_uri=model_uri)
+            logger.info("Model loaded successfully.")
+            st.success(f"*:blue[{model_name}:{model_alias}]* model loaded successfully!", icon="✅")
+            return mlf_model
     except Exception as e:
         logger.critical(f"Error loading model: {e}")
         st.error(f"Error loading model: {e}", icon="🚨")
@@ -74,12 +84,15 @@ if "mlf_sk_model_v1" not in st.session_state or st.session_state.mlf_sk_model_v1
     st.session_state.mlf_sk_model_v1 = load_model(model_alias="challenger1")
 if "mlf_sk_model_v2" not in st.session_state or st.session_state.mlf_sk_model_v2 is None:
     st.session_state.mlf_sk_model_v2 = load_model(model_alias="challenger2")
+if "mlf_pt_model_v1" not in st.session_state or st.session_state.mlf_pt_model_v1 is None:
+    st.session_state.mlf_pt_model_v1 = load_model(model_alias="champion")
 if "mlf_artifacts" not in st.session_state or st.session_state.mlf_artifacts is None:
     try:
-        logger.info("Loading artifacts from MLflow.")
-        st.session_state.mlf_artifacts = artifacts.download_artifacts(run_id="48f0b164815a408fba4fd7c61e2966cf")
-        logger.info("Artifacts downloaded successfully.")
-        st.success("Artifacts downloaded successfully!", icon="✅")
+        with st.spinner("This may take few moments. Downloading artifacts from MLflow..."):
+            logger.info("Downloading artifacts from MLflow.")
+            st.session_state.mlf_artifacts = artifacts.download_artifacts(run_id="8649ae88c7bc41218b4c96f9d41f72bf")
+            logger.info("Artifacts downloaded successfully.")
+            st.success("Artifacts downloaded successfully!", icon="✅")
     except Exception as e:
         logger.critical(f"Error downloading artifacts: {e}")
         st.error(f"Error downloading artifacts: {e}", icon="🚨")
@@ -91,45 +104,48 @@ if st.session_state.mlf_artifacts is None:
     st.stop()
 
 try:
-    logger.info("Loading artifacts.")
-    artifacts_path = str(st.session_state.mlf_artifacts)  # Convert to string explicitly
-    
-    artifact_files = {
-        "le_crts": "le_crts/le_crts.sav",
-        "le_intbks": "le_intbks/le_intbks.sav",
-        "le_intca": "le_intca/le_intca.sav",
-        "le_intsb": "le_intsb/le_intsb.sav",
-        "le_memsc": "le_memsc/le_memsc.sav",
-        "le_rwr": "le_rwr/le_rwr.sav",
-        "le_tycompt": "le_tycompt/le_tycompt.sav",
-        "le_wkshp": "le_wkshp/le_wkshp.sav",
-        "ohe": "ohe/one_hot_encoder.sav",
-        "ohe_cols": "ohe_cols/ohe_cols.sav"
-    }
+    with st.spinner("This may take few moments. Loading artifacts..."):
+        logger.info("Loading artifacts.")
+        artifacts_path = str(st.session_state.mlf_artifacts)  # Convert to string explicitly
+        
+        artifact_files = {
+            "le_crts": "le_crts/le_crts.sav",
+            "le_intbks": "le_intbks/le_intbks.sav",
+            "le_intca": "le_intca/le_intca.sav",
+            "le_intsb": "le_intsb/le_intsb.sav",
+            "le_memsc": "le_memsc/le_memsc.sav",
+            "le_rwr": "le_rwr/le_rwr.sav",
+            "le_tycompt": "le_tycompt/le_tycompt.sav",
+            "le_wkshp": "le_wkshp/le_wkshp.sav",
+            "ohe": "ohe/one_hot_encoder.sav",
+            "ohe_cols": "ohe_cols/ohe_cols.sav",
+            "le_y": "le_y/le_y.sav"
+        }
 
-    # Load all artifacts
-    loaded_artifacts = {}
-    for name, filepath in artifact_files.items():
-        full_path = os.path.join(artifacts_path, filepath)
-        if not os.path.exists(full_path):
-            raise FileNotFoundError(f"Artifact file not found: {full_path}")
-        with open(full_path, "rb") as f:
-            loaded_artifacts[name] = pickle.load(f)
+        # Load all artifacts
+        loaded_artifacts = {}
+        for name, filepath in artifact_files.items():
+            full_path = os.path.join(artifacts_path, filepath)
+            if not os.path.exists(full_path):
+                raise FileNotFoundError(f"Artifact file not found: {full_path}")
+            with open(full_path, "rb") as f:
+                loaded_artifacts[name] = pickle.load(f)
 
-    # Assign to variables
-    le_crts = loaded_artifacts["le_crts"]
-    le_intbks = loaded_artifacts["le_intbks"]
-    le_intca = loaded_artifacts["le_intca"]
-    le_intsb = loaded_artifacts["le_intsb"]
-    le_memsc = loaded_artifacts["le_memsc"]
-    le_rwr = loaded_artifacts["le_rwr"]
-    le_tycompt = loaded_artifacts["le_tycompt"]
-    le_wkshp = loaded_artifacts["le_wkshp"]
-    ohe = loaded_artifacts["ohe"]
-    ohe_cols = loaded_artifacts["ohe_cols"]
+        # Assign to variables
+        le_crts = loaded_artifacts["le_crts"]
+        le_intbks = loaded_artifacts["le_intbks"]
+        le_intca = loaded_artifacts["le_intca"]
+        le_intsb = loaded_artifacts["le_intsb"]
+        le_memsc = loaded_artifacts["le_memsc"]
+        le_rwr = loaded_artifacts["le_rwr"]
+        le_tycompt = loaded_artifacts["le_tycompt"]
+        le_wkshp = loaded_artifacts["le_wkshp"]
+        ohe = loaded_artifacts["ohe"]
+        ohe_cols = loaded_artifacts["ohe_cols"]
+        le_y = loaded_artifacts["le_y"]
 
-    logger.info("Artifacts loaded successfully.")
-    st.success("Artifacts loaded successfully!", icon="✅")
+        logger.info("Artifacts loaded successfully.")
+        st.success("Artifacts loaded successfully!", icon="✅")
 except Exception as e:
     logger.critical(f"Error loading artifacts: {e}")
     st.error(f"Error loading artifacts: {e}", icon="🚨")
@@ -208,10 +224,12 @@ TYPE_COMP_LIST: List[str] = ['BPA', 'Cloud Services', 'product development',
        'Service Based']
 type_comp: str = st.selectbox("Select the type of company you want to settle in", options=TYPE_COMP_LIST, index=0, help="Select the type of company you want to settle in - Select from the list")
 st.markdown("<br><br>", unsafe_allow_html=True)
-# Select model version
-MODEL_VRSN_MAP: Dict[str, str] = {"challenger1": "Version 1️⃣", "challenger2": "Version 2️⃣"}
-model_version: str = str(st.pills("Select the model version to use for prediction", options=MODEL_VRSN_MAP, default="challenger2", format_func=lambda option: MODEL_VRSN_MAP[option], help="Select the model version to use for prediction - Version 1 or Version 2"))
 
+# Select model version
+MODEL_VRSN_MAP: Dict[str, str] = {"challenger1": "Version 1️⃣", "challenger2": "Version 2️⃣", "champion": "Version 3️⃣"}
+model_version: str = str(st.pills("Select the model version to use for prediction", options=MODEL_VRSN_MAP, default="champion", format_func=lambda option: MODEL_VRSN_MAP[option], help="Select the model version to use for prediction - Version 1 (Sklearn Model), Version 2 (Sklearn Model), Version 3 (Pytorch Model)"))
+
+# Random seed
 random_seed: int = st.number_input("Random Seed", min_value=0, max_value=100, value=42, step=1, help="Random Seed - Random seed for reproducibility")
 
 # Button to get recommendation
@@ -283,16 +301,31 @@ df['Experience_Exposure'] = (
 )
 
 # Confirming the model version
-model_: Pipeline | Any = None
+model_: Union[Pipeline, model_builder.MulticlassClassifier_, Any]
 match model_version:
-    case "challenger1":
-        model_ = st.session_state.mlf_sk_model_v1
-    case "challenger2":
-        model_ = st.session_state.mlf_sk_model_v2
+    case "champion":
+        model_ = st.session_state.mlf_pt_model_v1
+        if not isinstance(model_, model_builder.MulticlassClassifier_):
+            logger.error(f"Expected MulticlassClassifier_, got {type(model_)}")
+            st.error("Invalid model type for champion version", icon="🚨")
+            st.stop()
+    case  "challenger1" | "challenger2":
+        model_ = (st.session_state.mlf_sk_model_v1 
+                 if model_version == "challenger1" 
+                 else st.session_state.mlf_sk_model_v2)
+        if not isinstance(model_, Pipeline):
+            logger.error(f"Expected Pipeline, got {type(model_)}")
+            st.error("Invalid model type for challenger version", icon="🚨")
+            st.stop()
     case _:
         logger.error(f"Invalid model version: {model_version}")
         st.error(f"Invalid model version: {model_version}", icon="🚨")
         st.stop()
+
+logger.info(f"model_version: {model_version}")
+logger.info(f"isinstance(model_, Pipeline): {isinstance(model_, Pipeline)}")
+logger.info(f"isinstance(model_, model_builder.MulticlassClassifier_): {isinstance(model_, model_builder.MulticlassClassifier_)}")
+logger.info(f"model_: {model_}")
 
 # Validate that model was loaded successfully
 if model_ is None:
@@ -301,16 +334,37 @@ if model_ is None:
     st.stop()
 
 # Making prediction
+selected_features: List = ['hackathons', 'certifications', 'Type of company want to settle in?',
+                              'Interested Type of Books', 'Introvert_yes', 'Technical_Inclination',
+                              'Teamwork_Comm_Aptitude', 'Proactive_Learning', 'Company_Fit',
+                              'Experience_Exposure']
 st.subheader("Your Job Role & Courses Recommendation📋:")
 np.random.seed(random_seed)
 if pred_btn:
     with st.spinner("Making prediction..."):
-        time.sleep(2)
+        # time.sleep(2)
         try:
             logger.info("Making prediction.")
-            pred = model_.predict(df[model_.feature_names_in_])
-            pred_proba = model_.predict_proba(df[model_.feature_names_in_])
-            logger.info(f"Prediction made successfully. Predicted job role: {pred[0]}")
+            pred = None
+            pred_proba = None
+            if isinstance(model_, model_builder.MulticlassClassifier_):
+                print("Using MulticlassClassifier_ model for prediction.")
+                model_.eval()
+                with torch.inference_mode():
+                    input_tensor = torch.FloatTensor(df[selected_features].values)
+                    with torch.no_grad():
+                        logits = model_(input_tensor).cpu()
+                        # ic(logits)
+                        pred_proba = torch.softmax(logits, dim=1)
+                        # ic(pred_proba)
+                        pred = torch.argmax(pred_proba, dim=1).item()
+                        pred = le_y.inverse_transform([pred])[0]
+                        # ic(pred)
+                    logger.info(f"Prediction made successfully. Predicted job role: {pred}\nConfidence scores: {pred_proba.numpy().tolist()}")
+            elif isinstance(model_, Pipeline):
+                pred = model_.predict(df[model_.feature_names_in_])[0]
+                pred_proba = model_.predict_proba(df[model_.feature_names_in_])
+                logger.info(f"Prediction made successfully. Predicted job role: {pred}\nConfidence scores: {pred_proba[0].tolist()}")
             st.success("Prediction made successfully!", icon="✅")
         except Exception as e:
             logger.critical(f"Error making prediction: {e}")
@@ -319,16 +373,26 @@ if pred_btn:
 
     # Displaying the prediction
     # st.markdown("----")
-    st.write(f"**Job Role:** :orange[{pred[0]}]")
+    st.write(f"**Job Role:** :orange[{pred}]")
     # st.write(f"**Courses to get started with:** {pred_proba[0]}")
-    if np.max(pred_proba) > 0.79:
-        txt2 = f":green[{np.max(pred_proba):.2%}]"
-    elif np.max(pred_proba) > 0.49:
-        txt2 = f":blue[{np.max(pred_proba):.2%}]"
-    else:
-        txt2 = f":red[{np.max(pred_proba):.2%}]"
-    st.write(f":gray[*Model Confidence on Prediction:*] {txt2}")
-    # st.markdown("----")
+    confidence_score = 0
+    if pred_proba is not None:
+        if isinstance(pred_proba, torch.Tensor):
+            confidence_score = torch.max(pred_proba).numpy().item()
+        elif isinstance(pred_proba, np.ndarray):
+            confidence_score = np.max(pred_proba)
+        else:
+            logger.critical(f"Invalid prediction probability type: {type(pred_proba)}")
+            st.error(f"Invalid prediction probability type: {type(pred_proba)}", icon="🚨")
+
+        if confidence_score > 0.79:
+            txt2 = f":green[{confidence_score:.2%}]"
+        elif confidence_score > 0.49:
+            txt2 = f":blue[{confidence_score:.2%}]"
+        else:
+            txt2 = f":red[{confidence_score:.2%}]"
+        st.write(f":gray[*Model Confidence on Prediction:*] {txt2}")
+        # st.markdown("----")
 
 
 # Disclaimer
