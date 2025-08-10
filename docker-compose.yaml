@@ -1,0 +1,121 @@
+# Define the services (containers) for your application
+services:
+  # Define a service named 'ml-dev' for your AI/ML development environment
+  ml-dev:
+    # Build the image from the Dockerfile in the current directory
+    build: .
+    # Assign a specific container name, as requested
+    container_name: ml-brain-container-v2
+    # Assign an image name for the built image, maintaining the previous name
+    image: ml-brain-lab-v2
+    # Map a range of ports from the container to the host
+    # This allows access to services like JupyterLab (8888) and others (up to 8896)
+    ports:
+      - "8888:8888"
+      - "8889:8889"
+      - "8890:8890"
+      - "8891:8891"
+      - "8892:8892"
+      - "8893:8893"
+      - "8894:8894"
+      - "8895:8895"
+      - "8896:8896"
+      - "2222:22"
+    # Mount the current directory on the host to the working directory in the container
+    # This allows you to access your project files inside the container
+    volumes:
+      - .:/home/ml-brain-dev/workspace:rw
+      # Mount a secrets file from your local machine into the container
+      # The source path is relative to the directory where docker-compose.yml is located
+      # The target path is where the file will appear inside the container
+      - ./secrets.json:/etc/secrets/app_secrets.json:ro
+    user: "1000:1000"
+    # Load environment variables from a .env file located in the same directory
+    # This is a convenient way to manage multiple environment variables
+    env_file:
+      - ./.env
+    # Override the default command to keep the container running
+    # This makes it easy to attach to the container later or run interactive commands
+    # command: /bin/fish
+    # Add environment variables for better container behavior
+    environment:
+      - DOCKER_BUILDKIT=1
+      - TERM=xterm-256color
+      - SHELL=/usr/bin/fish
+      - PYTHONPATH=/home/ml-brain-dev:/home/ml-brain-dev/workspace
+      - MPLCONFIGDIR=/home/ml-brain-dev/.config/matplotlib
+      - XDG_CONFIG_HOME=/home/ml-brain-dev/.config
+      - XDG_CACHE_HOME=/home/ml-brain-dev/.cache
+      - XDG_DATA_HOME=/home/ml-brain-dev/.local/share
+      # GPU environment variables (even for CPU-only service)
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    command: ./start.sh
+    # Use tty and stdin_open for interactive shell support
+    tty: true
+    stdin_open: true
+    # Set restart policy
+    restart: unless-stopped
+    # Optional: Add healthcheck
+    healthcheck:
+      test: ["CMD", "python3", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  gpu_service:  
+    build: .  
+    # Assign a specific container name, as requested
+    container_name: ml-brain-gpu-container-v2
+    # Assign an image name for the built image, maintaining the previous name
+    image: ml-brain-lab-gpu-v2
+    # CRITICAL: Add runtime configuration for GPU access
+    runtime: nvidia
+    # Map a range of ports from the container to the host
+    # This allows access to services like JupyterLab (8888) and others (up to 8896)
+    ports:
+      - "8898:8888"
+      - "8899:8889"
+      - "8900:8890"
+      - "8901:8891"
+      - "8902:8892"
+      - "8903:8893"
+      - "8904:8894"
+      - "8905:8895"
+      - "8906:8896"
+      - "2232:22"
+    volumes:
+      - .:/home/ml-brain-dev/workspace:rw                          
+      - ./secrets.json:/etc/secrets/app_secrets.json:ro            
+    user: "1000:1000"       
+    env_file:               
+      - ./.env              
+    environment: 
+      - DOCKER_BUILDKIT=1
+      - TERM=xterm-256color 
+      - SHELL=/usr/bin/fish 
+      - PYTHONPATH=/home/ml-brain-dev:/home/ml-brain-dev/workspace 
+      - MPLCONFIGDIR=/home/ml-brain-dev/.config/matplotlib         
+      - XDG_CONFIG_HOME=/home/ml-brain-dev/.config                 
+      - XDG_CACHE_HOME=/home/ml-brain-dev/.cache                   
+      - XDG_DATA_HOME=/home/ml-brain-dev/.local/share              
+      - USE_GPU_IF_AVAILABLE=true
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # CUDA environment variables for Python/PyTorch - ALL GPUs
+      - CUDA_VISIBLE_DEVICES=all
+      - CUDA_DEVICE_ORDER=PCI_BUS_ID
+    command: ./start.sh                                            
+    tty: true                                                      
+    stdin_open: true            
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+

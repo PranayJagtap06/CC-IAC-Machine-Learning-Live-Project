@@ -1,0 +1,40 @@
+scikit-learn==1.6.1
+ipython
+numpy
+pandas
+fireducks
+matplotlib
+seaborn
+plotly
+cufflinks
+imblearn
+h5py
+pillow
+streamlit
+fastapi[standard]
+pydantic
+requests
+rich
+beautifulsoup4
+soupsieve
+transformers
+datasets
+notebook
+jupyterlab
+ruff
+python-lsp-ruff
+flask
+pyright
+spyder-kernels
+# spyder
+mlflow==2.18.0
+dagshub
+optuna
+icecream
+tqdm
+scipy
+# torch
+# torchmetrics
+# torchvision
+# tensorflow
+statsmodels

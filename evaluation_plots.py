@@ -1,22 +1,12 @@
 # evaluation_plots.py
 import os
-import numpy as np
-import plotly.io as pio
-import plotly.express as px
-import plotly.graph_objects as go
-from typing import Union, Tuple
-from scipy.sparse import spmatrix
 from plotly.graph_objs import Figure
-from sklearn.preprocessing import label_binarize
-from sklearn.metrics import (
-    confusion_matrix,
-    precision_recall_curve,
-    roc_curve,
-    auc,
-    average_precision_score,
-)
+import plotly.express as px
+import pandas as pd
+from typing import Tuple
+import plotly.io as pio
 
-pio.renderers.default = "browser"  # 'colab' for colab env
+pio.renderers.default = "colab"
 pio.templates.default = "seaborn"
 
 # Function for saving plotly plots as html to embed them later
@@ -65,145 +55,203 @@ def fig_to_html(
             f.write(template.render(plotly_jinja_data))
 
 
-# Plotting the Confusion Matrix
-def plot_confusion_matrix(
-    y_true: np.ndarray,
-    y_pred: Union[np.ndarray, Tuple[np.ndarray, np.ndarray]],
-    target_names: np.ndarray,
-    model_name: str,
-    plot_name: str,
-) -> Figure:
-    """Plot confusion matrix."""
+def nn_model_plots(saved_metrics: pd.DataFrame) -> Tuple[Figure, Figure, Figure, Figure, Figure, Figure] | Tuple[Figure, Figure, Figure]:
+# Plotting curve.
+    if len(saved_metrics.columns) > 7 and 'train_losses1' in saved_metrics.columns:
+        fig1 = px.line(data_frame=saved_metrics, x='epochs', y=[
+                    'train_losses0', 'val_losses0'], height=750, width=750, title='Loss Curves: GPU0')
 
-    if isinstance(y_pred, tuple):
-        y_pred = y_pred[0]
+        fig1.update_xaxes(title_text='Epoch',)
+        fig1.update_yaxes(title_text='Loss')
+        fig1.update_traces(mode='lines+markers')
+        fig1.update_layout(legend_title_text='Metrics:', legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig1.update_layout(legend_title_font_color="black")
+        fig1.update_layout(legend_title_font_size=16)
+        fig1.update_layout(legend_font_color="black")
+        fig1.update_layout(legend_font_size=16)
 
-    cm = confusion_matrix(y_true, y_pred)
+        fig_to_html(fig1, 'loss_curves_gpu0.html')
+        fig1.show()
 
-    fig = px.imshow(
-        cm,
-        text_auto=True,  # Display values on the heatmap
-        labels=dict(x="Predicted", y="True"),  # Set axis labels
-        x=target_names,  # Update x-axis labels
-        y=target_names,  # Update y-axis labels
-        color_continuous_scale="Blues",  # Customize the color scale
-        width=1000,
-        height=1000,
-    )
+        fig2 = px.line(data_frame=saved_metrics, x='epochs', y=[
+                    'train_losses1', 'val_losses1'], height=750, width=750, title='Loss Curves: GPU1')
 
-    # Set plot title
-    fig.update_layout(title=f"Confusion Matrix: {model_name}")
-    fig_to_html(fig, f"{plot_name}")
-    fig.show()  # Display plot
-    return fig  # Return the figure object
+        fig2.update_xaxes(title_text='Epoch',)
+        fig2.update_yaxes(title_text='Loss')
+        fig2.update_traces(mode='lines+markers')
+        fig2.update_layout(legend_title_text='Metrics:', legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig2.update_layout(legend_title_font_color="black")
+        fig2.update_layout(legend_title_font_size=16)
+        fig2.update_layout(legend_font_color="black")
+        fig2.update_layout(legend_font_size=16)
 
+        fig_to_html(fig2, 'loss_curves_gpu1.html')
+        fig2.show()
 
-# Plotting Precision-Recall Curve
-def plot_precision_recall_curve(
-    y_true: np.ndarray,
-    y_pred: np.ndarray,
-    target_names: np.ndarray,
-    model_name: str,
-    plot_name: str,
-) -> Figure:
-    """Plot precision-recall curve."""
+        fig3 = px.line(data_frame=saved_metrics, x='epochs', y=[
+                    'train_accs0', 'val_accs0'], height=750, width=750, title='Accuracy Curves: GPU0')
 
-    # Assuming you have 'y_test' (true labels) and 'y_preds' (predicted labels)
+        fig3.update_xaxes(title_text='Epoch',)
+        fig3.update_yaxes(title_text='Accuracy')
+        fig3.update_traces(mode='lines+markers')
+        fig3.update_layout(legend_title_text='Metrics:', legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig3.update_layout(legend_title_font_color="black")
+        fig3.update_layout(legend_title_font_size=16)
+        fig3.update_layout(legend_font_color="black")
+        fig3.update_layout(legend_font_size=16)
 
-    # 1. Binarize the labels
-    n_classes = len(target_names)  # Get the number of classes
-    y_true_bin: Union[np.ndarray, spmatrix] = label_binarize(
-        y_true, classes=range(n_classes))
-    y_pred_bin: Union[np.ndarray, spmatrix] = label_binarize(
-        y_pred, classes=range(n_classes))
+        fig_to_html(fig3, 'acc_curves_gpu0.html')
+        fig3.show()
 
-    # Convert to dense arrays if they are sparse matrices
-    y_true_bin = np.asarray(y_true_bin)
-    y_pred_bin = np.asarray(y_pred_bin)
+        fig4 = px.line(data_frame=saved_metrics, x='epochs', y=[
+                    'train_accs1', 'val_accs1'], height=750, width=750, title='Accuracy Curves: GPU1')
 
-    # 2. Create the Plotly figure
-    fig = go.Figure()
+        fig4.update_xaxes(title_text='Epoch',)
+        fig4.update_yaxes(title_text='Accuracy')
+        fig4.update_traces(mode='lines+markers')
+        fig4.update_layout(legend_title_text='Metrics:', legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig4.update_layout(legend_title_font_color="black")
+        fig4.update_layout(legend_title_font_size=16)
+        fig4.update_layout(legend_font_color="black")
+        fig4.update_layout(legend_font_size=16)
 
-    # 3. Calculate and plot precision-recall curves for each class
-    for i, k in enumerate(target_names):
-        precision, recall, _ = precision_recall_curve(
-            y_true_bin[:, i], y_pred_bin[:, i]
-        )
-        avg_precision = average_precision_score(
-            y_true_bin[:, i], y_pred_bin[:, i])
+        fig_to_html(fig4, 'acc_curves_gpu1.html')
+        fig4.show()
 
-        fig.add_trace(
-            go.Scatter(
-                x=recall,
-                y=precision,
-                mode="lines",
-                name=f"{k} (Avg Precision: {avg_precision:.2f})",
-            )
-        )
+        fig5 = px.line(data_frame=saved_metrics, x='epochs', y=[
+                    'train_f1s0', 'val_f1s0'], height=750, width=750, title='F1-Score Curves: GPU0')
 
-    # 4. Update layout for better visualization
-    fig.update_layout(
-        title=f"Precision-Recall Curve: {model_name}",
-        xaxis_title="Recall",
-        yaxis_title="Precision",
-        xaxis_range=[0, 1],
-        yaxis_range=[0, 1],
-        showlegend=True,
-    )
+        fig5.update_xaxes(title_text='Epoch',)
+        fig5.update_yaxes(title_text='F1-Score')
+        fig5.update_traces(mode='lines+markers')
+        fig5.update_layout(legend_title_text='Metrics:', legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig5.update_layout(legend_title_font_color="black")
+        fig5.update_layout(legend_title_font_size=16)
+        fig5.update_layout(legend_font_color="black")
+        fig5.update_layout(legend_font_size=16)
 
-    fig_to_html(fig, f"{plot_name}")
+        fig_to_html(fig5, 'f1s_curves_gpu0.html')
+        fig5.show()
 
-    fig.show()  # Display plot
-    return fig  # Return the figure object
+        fig6 = px.line(data_frame=saved_metrics, x='epochs', y=[
+                    'train_f1s1', 'val_f1s1'], height=750, width=750, title='F1-Score Curves: GPU1')
 
+        fig6.update_xaxes(title_text='Epoch',)
+        fig6.update_yaxes(title_text='F1-Score')
+        fig6.update_traces(mode='lines+markers')
+        fig6.update_layout(legend_title_text='Metrics:', legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig6.update_layout(legend_title_font_color="black")
+        fig6.update_layout(legend_title_font_size=16)
+        fig6.update_layout(legend_font_color="black")
+        fig6.update_layout(legend_font_size=16)
 
-# Plotting ROC Curve
+        fig_to_html(fig6, 'f1s_curves_gpu1.html')
+        fig6.show()
 
+        return fig1, fig2, fig3, fig4, fig5, fig6
+    elif len(saved_metrics.columns == 7) and 'train_losses1' not in saved_metrics.columns:
+        fig1 = px.line(data_frame=saved_metrics, x='epochs', y=[
+                    'train_losses0', 'val_losses0'], height=750, width=750, title='Loss Curves: GPU')
 
-def plot_roc_curve(
-    y_true: np.ndarray,
-    y_pred: np.ndarray,
-    target_names: np.ndarray,
-    model_name: str,
-    plot_name: str,
-) -> Figure:
-    """Plots the ROC curve."""
+        fig1.update_xaxes(title_text='Epoch',)
+        fig1.update_yaxes(title_text='Loss')
+        fig1.update_traces(mode='lines+markers')
+        fig1.update_layout(legend_title_text='Metrics:', legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig1.update_layout(legend_title_font_color="black")
+        fig1.update_layout(legend_title_font_size=16)
+        fig1.update_layout(legend_font_color="black")
+        fig1.update_layout(legend_font_size=16)
 
-    # 1. Binarize the labels.
-    n_classes = len(target_names)  # Get the number of classes
-    y_true_bin: Union[np.ndarray, spmatrix] = label_binarize(
-        y_true, classes=range(n_classes))
-    y_pred_bin: Union[np.ndarray, spmatrix] = label_binarize(
-        y_pred, classes=range(n_classes))
+        fig_to_html(fig1, 'loss_curves_gpu.html')
+        fig1.show()
 
-    # Convert to dense arrays if they are sparse matrices
-    y_true_bin = np.asarray(y_true_bin)
-    y_pred_bin = np.asarray(y_pred_bin)
+        fig2 = px.line(data_frame=saved_metrics, x='epochs', y=[
+                    'train_accs0', 'val_accs0'], height=750, width=750, title='Accuracy Curves: GPU')
 
-    # 2. Create the figure.
-    fig = go.Figure()
+        fig2.update_xaxes(title_text='Epoch',)
+        fig2.update_yaxes(title_text='Accuracy')
+        fig2.update_traces(mode='lines+markers')
+        fig2.update_layout(legend_title_text='Metrics:', legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig2.update_layout(legend_title_font_color="black")
+        fig2.update_layout(legend_title_font_size=16)
+        fig2.update_layout(legend_font_color="black")
+        fig2.update_layout(legend_font_size=16)
 
-    # 3. Calculate the fpr and tpr.
-    for i, k in enumerate(target_names):
-        fpr, tpr, _ = roc_curve(y_true_bin[:, i], y_pred_bin[:, i])
-        roc_auc = auc(fpr, tpr)
+        fig_to_html(fig2, 'acc_curves_gpu.html')
+        fig2.show()
 
-        fig.add_trace(
-            go.Scatter(x=fpr, y=tpr, mode="lines",
-                       name=f"{k} (AUC = {roc_auc:.2f})")
-        )
+        fig3 = px.line(data_frame=saved_metrics, x='epochs', y=[
+                    'train_f1s0', 'val_f1s0'], height=750, width=750, title='F1-Score Curves: GPU')
 
-    # 4. Update the plot.
-    fig.update_layout(
-        title=f"ROC Curve: {model_name}",
-        xaxis_title="False Positive Rate",
-        yaxis_title="True Positive Rate",
-        xaxis_range=[0, 1],
-        yaxis_range=[0, 1],
-        showlegend=True,
-    )
+        fig3.update_xaxes(title_text='Epoch',)
+        fig3.update_yaxes(title_text='F1-Score')
+        fig3.update_traces(mode='lines+markers')
+        fig3.update_layout(legend_title_text='Metrics:', legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig3.update_layout(legend_title_font_color="black")
+        fig3.update_layout(legend_title_font_size=16)
+        fig3.update_layout(legend_font_color="black")
+        fig3.update_layout(legend_font_size=16)
 
-    fig_to_html(fig, f"{plot_name}")
+        fig_to_html(fig3, 'f1s_curves_gpu.html')
+        fig3.show()
 
-    fig.show()  # Display
-    return fig  # Return the figure object
+        return fig1, fig2, fig3
+    else:
+        fig1 = px.line(data_frame=saved_metrics, x='epochs', y=[
+                    'train_losses', 'val_losses'], height=750, width=750, title='Loss Curves: CPU')
+
+        fig1.update_xaxes(title_text='Epoch',)
+        fig1.update_yaxes(title_text='Loss')
+        fig1.update_traces(mode='lines+markers')
+        fig1.update_layout(legend_title_text='Metrics:', legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig1.update_layout(legend_title_font_color="black")
+        fig1.update_layout(legend_title_font_size=16)
+        fig1.update_layout(legend_font_color="black")
+        fig1.update_layout(legend_font_size=16)
+
+        fig_to_html(fig1, 'loss_curves_cpu.html')
+        fig1.show()
+
+        fig2 = px.line(data_frame=saved_metrics, x='epochs', y=[
+                    'train_accs', 'val_accs'], height=750, width=750, title='Accuracy Curves: CPU')
+
+        fig2.update_xaxes(title_text='Epoch',)
+        fig2.update_yaxes(title_text='Accuracy')
+        fig2.update_traces(mode='lines+markers')
+        fig2.update_layout(legend_title_text='Metrics:', legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig2.update_layout(legend_title_font_color="black")
+        fig2.update_layout(legend_title_font_size=16)
+        fig2.update_layout(legend_font_color="black")
+        fig2.update_layout(legend_font_size=16)
+
+        fig_to_html(fig2, 'acc_curves_cpu.html')
+        fig2.show()
+
+        fig3 = px.line(data_frame=saved_metrics, x='epochs', y=[
+                    'train_f1s', 'val_f1s'], height=750, width=750, title='F1-Score Curves: CPU')
+
+        fig3.update_xaxes(title_text='Epoch',)
+        fig3.update_yaxes(title_text='F1-Score')
+        fig3.update_traces(mode='lines+markers')
+        fig3.update_layout(legend_title_text='Metrics:', legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig3.update_layout(legend_title_font_color="black")
+        fig3.update_layout(legend_title_font_size=16)
+        fig3.update_layout(legend_font_color="black")
+        fig3.update_layout(legend_font_size=16)
+
+        fig_to_html(fig3, 'f1s_curves_cpu.html')
+        fig3.show()
+
+        return fig1, fig2, fig3
